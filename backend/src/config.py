@@ -6,7 +6,9 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(ROOT / ".env")
+load_dotenv(ROOT / ".en")
 
 
 @dataclass(frozen=True)
@@ -19,8 +21,12 @@ class Settings:
     grafana_url: str = os.getenv("GRAFANA_URL", "http://localhost:3000")
     grafana_user: str = os.getenv("GRAFANA_USER", "admin")
     grafana_password: str = os.getenv("GRAFANA_PASSWORD", "admin")
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    openai_api_key: str = os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_API_KEY", "")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    @property
+    def open_api_key(self) -> str:
+        return self.openai_api_key
 
     @property
     def database_url(self) -> str:

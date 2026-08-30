@@ -30,7 +30,7 @@ The compose file remains a Linux/VM reference, but Windows does not need it.
 ```bash
 cd /path/to/netpulse
 docker compose up -d
-python scripts/run_pipeline.py
+python backend/scripts/run_pipeline.py
 ```
 
 ## No Grafana API key required

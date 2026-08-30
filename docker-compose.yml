@@ -24,9 +24,48 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_PANELS_DISABLE_SANITIZE_HTML: "true"
+      GF_DASHBOARDS_ALLOW_IN_APP_DASHBOARD_CHANGES: "true"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
+
+  backend-runner:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: netpulse-backend
+    depends_on:
+      - postgres
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: netpulse
+      POSTGRES_USER: netpulse
+      POSTGRES_PASSWORD: netpulse
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPEN_API_KEY: ${OPEN_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    profiles:
+      - apps
+
+  frontend-ui:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: netpulse-frontend
+    depends_on:
+      - postgres
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: netpulse
+      POSTGRES_USER: netpulse
+      POSTGRES_PASSWORD: netpulse
+    ports:
+      - "8501:8501"
+    profiles:
+      - apps
 
 volumes:
   postgres_data:

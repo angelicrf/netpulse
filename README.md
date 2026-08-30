@@ -13,10 +13,12 @@ Grafana / PostgreSQL -> Anomaly detected -> AI Agent -> root-cause analysis
 
 ## Project structure
 
-- `src/` - Python application code
-- `scripts/` - execution helpers
+- `backend/src/` - Python backend application code
+- `backend/scripts/` - backend execution helpers
+- `requirements.txt` - Python dependencies
 - `postgres/` - database initialization SQL
 - `grafana/` - Grafana provisioning and dashboard configuration
+- `frontend/` - Streamlit web UI for AI narrative
 - `docker-compose.yml` - runs PostgreSQL and Grafana locally
 
 ## Runtime modes
@@ -33,7 +35,7 @@ This project supports three execution paths:
 cp .env.example .env
 docker compose up -d
 python -m pip install -r requirements.txt
-python scripts/run_pipeline.py
+python backend/scripts/run_pipeline.py
 ```
 
 ### Option 2: Windows native services
@@ -63,7 +65,7 @@ For VM environments, set the connection values in `.env` to the VM IP address in
 ## Run the Python automation
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_pipeline.py
+.\.venv\Scripts\python.exe backend\scripts\run_pipeline.py
 ```
 
 ## Open Grafana
@@ -71,6 +73,48 @@ For VM environments, set the connection values in `.env` to the VM IP address in
 - URL: http://localhost:3000
 - Username: `admin`
 - Password: `admin`
+
+## Open Streamlit AI UI
+
+If the Grafana narrative panels are hard to read, use the dedicated Streamlit frontend:
+
+```bash
+/home/angelique/Desktop/netpulse/.venv/bin/python -m pip install -r requirements.txt
+/home/angelique/Desktop/netpulse/.venv/bin/python -m streamlit run frontend/streamlit_app.py
+```
+
+Then open:
+
+- URL: http://localhost:8501
+
+This page shows the latest OpenAI summary, prediction, and workaround in large readable sections.
+
+## Dockerfiles for backend and frontend
+
+You do not need Dockerfiles to run the current default stack (PostgreSQL + Grafana + local Python).
+They are only needed if you want backend and frontend to run as containers too.
+
+Available Dockerfiles:
+
+- [backend/Dockerfile](backend/Dockerfile)
+- [frontend/Dockerfile](frontend/Dockerfile)
+
+Run infra only (default):
+
+```bash
+docker compose up -d
+```
+
+Run infra + app containers (optional profile):
+
+```bash
+docker compose --profile apps up -d --build
+```
+
+Notes:
+
+- backend-runner executes [backend/scripts/run_pipeline.py](backend/scripts/run_pipeline.py).
+- frontend-ui serves Streamlit at http://localhost:8501.
 
 ## Example AI finding
 
