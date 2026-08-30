@@ -1,0 +1,15 @@
+apiVersion: 1
+
+datasources:
+  - name: NetPulse Postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: netpulse
+    user: netpulse
+    secureJsonData:
+      password: netpulse
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
