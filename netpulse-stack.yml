@@ -1,0 +1,494 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: netpulse-postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netpulse-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netpulse-postgres
+  template:
+    metadata:
+      labels:
+        app: netpulse-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        env:
+        - name: POSTGRES_DB
+          value: "netpulse"
+        - name: POSTGRES_USER
+          value: "netpulse"
+        - name: POSTGRES_PASSWORD
+          value: "netpulse"
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  labels:
+    app: netpulse-grafana
+data:
+  postgres.yaml: |
+    apiVersion: 1
+
+    datasources:
+      - name: NetPulse Postgres
+        type: postgres
+        access: proxy
+        url: postgres:5432
+        database: netpulse
+        user: netpulse
+        secureJsonData:
+          password: netpulse
+        jsonData:
+          sslmode: disable
+          postgresVersion: 1600
+          timescaledb: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provisioning
+  labels:
+    app: netpulse-grafana
+data:
+  dashboard.yaml: |
+    apiVersion: 1
+
+    providers:
+      - name: "default"
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  labels:
+    app: netpulse-grafana
+data:
+  network-overview.json: |
+    {
+      "refresh": "10s",
+      "schemaVersion": 39,
+      "style": "dark",
+      "tags": [
+        "network",
+        "monitoring"
+      ],
+      "templating": {
+        "list": []
+      },
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "NetPulse Network Overview",
+      "uid": "netpulse-overview",
+      "version": 1,
+      "weekStart": "",
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "default"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 150
+                  },
+                  {
+                    "color": "red",
+                    "value": 220
+                  }
+                ]
+              },
+              "unit": "ms"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "format": "table",
+              "rawSql": "SELECT timestamp, latency_ms FROM network_metrics WHERE region = 'Nairobi' ORDER BY timestamp DESC LIMIT 50;",
+              "refId": "A"
+            }
+          ],
+          "title": "Nairobi Latency",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "default"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 150
+                  },
+                  {
+                    "color": "red",
+                    "value": 220
+                  }
+                ]
+              },
+              "unit": "ms"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 6,
+            "y": 0
+          },
+          "id": 2,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "format": "table",
+              "rawSql": "SELECT timestamp, latency_ms FROM network_metrics WHERE region = 'Lagos' ORDER BY timestamp DESC LIMIT 50;",
+              "refId": "A"
+            }
+          ],
+          "title": "Lagos Latency",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "default"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 150
+                  },
+                  {
+                    "color": "red",
+                    "value": 220
+                  }
+                ]
+              },
+              "unit": "ms"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 12,
+            "y": 0
+          },
+          "id": 4,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "format": "table",
+              "rawSql": "SELECT timestamp, latency_ms FROM network_metrics WHERE region = 'Johannesburg' ORDER BY timestamp DESC LIMIT 50;",
+              "refId": "A"
+            }
+          ],
+          "title": "Johannesburg Latency",
+          "type": "timeseries"
+        }
+      ],
+      "description": "Network latency dashboard for NetPulse regions",
+      "datasource": null
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: netpulse-secrets
+  labels:
+    app: netpulse
+type: Opaque
+stringData:
+  OPENAI_API_KEY: "replace-with-your-openai-key"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+spec:
+  type: NodePort
+  ports:
+    - port: 3000
+      targetPort: 3000
+  selector:
+    app: netpulse-grafana
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netpulse-grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netpulse-grafana
+  template:
+    metadata:
+      labels:
+        app: netpulse-grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:11.1.0
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "admin"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"
+        - name: GF_PANELS_DISABLE_SANITIZE_HTML
+          value: "true"
+        - name: GF_DASHBOARDS_ALLOW_IN_APP_DASHBOARD_CHANGES
+          value: "true"
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - name: grafana-datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: grafana-dashboard-provisioning
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: grafana-dashboards
+          mountPath: /var/lib/grafana/dashboards
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: grafana-datasources
+        configMap:
+          name: grafana-datasources
+      - name: grafana-dashboard-provisioning
+        configMap:
+          name: grafana-dashboard-provisioning
+      - name: grafana-dashboards
+        configMap:
+          name: grafana-dashboards
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netpulse-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netpulse-backend
+  template:
+    metadata:
+      labels:
+        app: netpulse-backend
+    spec:
+      containers:
+      - name: backend
+        image: netpulse-backend:latest
+        imagePullPolicy: Never
+        command: ["/bin/sh", "-c", "python backend/scripts/run_pipeline.py && while true; do sleep 30; done"]
+        env:
+        - name: POSTGRES_HOST
+          value: "postgres"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: "netpulse"
+        - name: POSTGRES_USER
+          value: "netpulse"
+        - name: POSTGRES_PASSWORD
+          value: "netpulse"
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: netpulse-secrets
+              key: OPENAI_API_KEY
+        - name: OPENAI_MODEL
+          value: "gpt-4o-mini"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  type: NodePort
+  ports:
+    - port: 8501
+      targetPort: 8501
+  selector:
+    app: netpulse-frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netpulse-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netpulse-frontend
+  template:
+    metadata:
+      labels:
+        app: netpulse-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: netpulse-frontend:latest
+        imagePullPolicy: Never
+        env:
+        - name: POSTGRES_HOST
+          value: "postgres"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: "netpulse"
+        - name: POSTGRES_USER
+          value: "netpulse"
+        - name: POSTGRES_PASSWORD
+          value: "netpulse"
+        ports:
+        - containerPort: 8501
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
