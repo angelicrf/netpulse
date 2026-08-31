@@ -323,16 +323,6 @@ data:
     }
 ---
 apiVersion: v1
-kind: Secret
-metadata:
-  name: netpulse-secrets
-  labels:
-    app: netpulse
-type: Opaque
-stringData:
-  OPENAI_API_KEY: "replace-with-your-openai-key"
----
-apiVersion: v1
 kind: Service
 metadata:
   name: grafana
@@ -428,10 +418,9 @@ spec:
         - name: POSTGRES_PASSWORD
           value: "netpulse"
         - name: OPENAI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: netpulse-secrets
-              key: OPENAI_API_KEY
+          value: "" # Fill this or pass as secret
+        - name: OPENAI_API_KEY
+          value: "" # Fill this or pass as secret
         - name: OPENAI_MODEL
           value: "gpt-4o-mini"
         resources:
@@ -485,6 +474,7 @@ spec:
           value: "netpulse"
         ports:
         - containerPort: 8501
+
         resources:
           requests:
             memory: "256Mi"

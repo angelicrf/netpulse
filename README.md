@@ -19,17 +19,69 @@ Grafana / PostgreSQL -> Anomaly detected -> AI Agent -> root-cause analysis
 - `postgres/` - database initialization SQL
 - `grafana/` - Grafana provisioning and dashboard configuration
 - `frontend/` - Streamlit web UI for AI narrative
+- `netpulse-stack.yml` - Kubernetes deployment for Minikube / cluster runtime
 - `docker-compose.yml` - runs PostgreSQL and Grafana locally
 
 ## Runtime modes
 
-This project supports three execution paths:
+This project supports four execution paths:
 
-1. Docker compose (Linux / VM reference)
-2. Windows native services (no Docker Desktop needed)
-3. VM-hosted services (PostgreSQL + Grafana running on a Linux VM)
+1. Kubernetes / Minikube (current default stack)
+2. Docker compose (Linux / VM reference)
+3. Windows native services (no Docker Desktop needed)
+4. VM-hosted services (PostgreSQL + Grafana running on a Linux VM)
 
-### Option 1: Docker compose (reference setup)
+### Option 1: Kubernetes / Minikube (recommended)
+
+This project now ships a Kubernetes deployment manifest at [netpulse-stack.yml](netpulse-stack.yml). It replaces the broken local host-directory mounts with Kubernetes `ConfigMap` objects so Grafana can find its datasource and dashboard definitions inside the cluster.
+
+Start the stack in Minikube:
+
+```bash
+minikube start
+kubectl apply -f netpulse-stack.yml
+kubectl get pods
+kubectl get svc
+kubectl rollout status deployment/netpulse-postgres --timeout=180s
+kubectl rollout status deployment/netpulse-grafana --timeout=180s
+kubectl rollout status deployment/netpulse-backend --timeout=180s
+kubectl rollout status deployment/netpulse-frontend --timeout=180s
+```
+
+Open the exposed services:
+
+```bash
+minikube service grafana
+minikube service frontend
+```
+
+Useful Kubernetes checks:
+
+```bash
+kubectl describe deployment netpulse-grafana
+kubectl get configmap
+kubectl get secret
+kubectl logs deployment/netpulse-grafana
+kubectl logs deployment/netpulse-backend
+```
+
+If you want to reload configuration after a manifest change:
+
+```bash
+kubectl apply -f netpulse-stack.yml
+kubectl rollout restart deployment/netpulse-grafana
+kubectl rollout restart deployment/netpulse-backend
+```
+
+The Grafana files are mounted from ConfigMaps at:
+
+- `/etc/grafana/provisioning/datasources`
+- `/etc/grafana/provisioning/dashboards`
+- `/var/lib/grafana/dashboards`
+
+This keeps the provisioning files portable across Kubernetes nodes and avoids the Docker Compose host-path issue that breaks in Minikube.
+
+### Option 2: Docker compose (reference setup)
 
 ```bash
 cp .env.example .env
@@ -38,7 +90,7 @@ python -m pip install -r requirements.txt
 python backend/scripts/run_pipeline.py
 ```
 
-### Option 2: Windows native services
+### Option 3: Windows native services
 
 Use the PowerShell entry point in the project root:
 
@@ -50,7 +102,7 @@ This starts or verifies PostgreSQL and Grafana as Windows services without requi
 
 Detailed instructions are in [windows/README_WINDOWS.md](windows/README_WINDOWS.md).
 
-### Option 3: VM-based services
+### Option 4: VM-based services
 
 Use the VM instructions in [vm/README_VM.md](vm/README_VM.md).
 
@@ -59,7 +111,8 @@ For VM environments, set the connection values in `.env` to the VM IP address in
 ## Common requirements
 
 - PostgreSQL 16 or compatible database service
-- Grafana installed locally or in a VM
+- Grafana available locally, in a VM, or in Kubernetes
+- Kubernetes / Minikube for the manifest-based deployment
 - No Grafana API key required for local dashboard usage
 
 ## Run the Python automation
@@ -70,13 +123,37 @@ For VM environments, set the connection values in `.env` to the VM IP address in
 
 ## Open Grafana
 
+If you are running the Kubernetes stack:
+
+- use `minikube service grafana`
+- or open the NodePort URL printed by Minikube
+- default login: `admin` / `admin`
+
+If you are running Docker or a local service:
+
 - URL: http://localhost:3000
 - Username: `admin`
 - Password: `admin`
 
+To confirm the dashboard is being provisioned correctly in Kubernetes:
+
+```bash
+kubectl exec -it deploy/netpulse-grafana -- ls -R /etc/grafana/provisioning /var/lib/grafana/dashboards
+```
+
+You should see the `dashboard.yaml`, datasource config, and the dashboard JSON file inside the Grafana container.
+
 ## Open Streamlit AI UI
 
-If the Grafana narrative panels are hard to read, use the dedicated Streamlit frontend:
+If the Grafana narrative panels are hard to read, use the dedicated Streamlit frontend.
+
+For Kubernetes / Minikube:
+
+```bash
+minikube service frontend
+```
+
+For local Python runs:
 
 ```bash
 /home/angelique/Desktop/netpulse/.venv/bin/python -m pip install -r requirements.txt
