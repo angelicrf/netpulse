@@ -3,6 +3,7 @@ apiVersion: 1
 datasources:
   - name: NetPulse Postgres
     type: postgres
+    uid: postgres
     access: proxy
     url: postgres:5432
     database: netpulse
@@ -13,3 +14,9 @@ datasources:
       sslmode: disable
       postgresVersion: 1600
       timescaledb: false
+  - name: NetPulse Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false

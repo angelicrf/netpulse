@@ -2,12 +2,14 @@
 
 This project demonstrates a small Python monitoring stack that follows the workflow below:
 
-Grafana / PostgreSQL -> Anomaly detected -> AI Agent -> root-cause analysis
+FastAPI (or backend worker) / PostgreSQL / Prometheus -> Grafana -> Alertmanager
 
 ## Architecture
 
 - PostgreSQL stores latency, packet loss, and POP status history
+- Prometheus scrapes service metrics and evaluates alert rules
 - Grafana visualizes the data with a free dashboard
+- Alertmanager receives alerts from Prometheus and handles routing
 - A Python automation script simulates metric collection and anomaly detection
 - An AI agent reviews the telemetry and highlights likely root causes
 
@@ -46,6 +48,8 @@ kubectl rollout status deployment/netpulse-postgres --timeout=180s
 kubectl rollout status deployment/netpulse-grafana --timeout=180s
 kubectl rollout status deployment/netpulse-backend --timeout=180s
 kubectl rollout status deployment/netpulse-frontend --timeout=180s
+kubectl rollout status deployment/netpulse-prometheus --timeout=180s
+kubectl rollout status deployment/netpulse-alertmanager --timeout=180s
 ```
 
 Open the exposed services:
@@ -53,16 +57,22 @@ Open the exposed services:
 ```bash
 minikube service grafana
 minikube service frontend
+minikube service prometheus
+minikube service alertmanager
 ```
 
 Useful Kubernetes checks:
 
 ```bash
 kubectl describe deployment netpulse-grafana
+kubectl describe deployment netpulse-prometheus
+kubectl describe deployment netpulse-alertmanager
 kubectl get configmap
 kubectl get secret
 kubectl logs deployment/netpulse-grafana
 kubectl logs deployment/netpulse-backend
+kubectl logs deployment/netpulse-prometheus
+kubectl logs deployment/netpulse-alertmanager
 ```
 
 If you want to reload configuration after a manifest change:
@@ -71,7 +81,16 @@ If you want to reload configuration after a manifest change:
 kubectl apply -f netpulse-stack.yml
 kubectl rollout restart deployment/netpulse-grafana
 kubectl rollout restart deployment/netpulse-backend
+kubectl rollout restart deployment/netpulse-prometheus
+kubectl rollout restart deployment/netpulse-alertmanager
 ```
+
+Capacity budget for Minikube 2 CPU / 4 GB:
+
+- Total requests: 1.00 CPU, 1.44 Gi
+- Total limits: 1.75 CPU, 2.75 Gi
+
+This leaves headroom for Kubernetes system components and avoids saturating a 2 CPU / 4 GB node.
 
 The Grafana files are mounted from ConfigMaps at:
 
@@ -142,6 +161,22 @@ kubectl exec -it deploy/netpulse-grafana -- ls -R /etc/grafana/provisioning /var
 ```
 
 You should see the `dashboard.yaml`, datasource config, and the dashboard JSON file inside the Grafana container.
+
+## Open Prometheus and Alertmanager
+
+For Kubernetes / Minikube:
+
+```bash
+minikube service prometheus
+minikube service alertmanager
+```
+
+Quick checks:
+
+```bash
+kubectl exec -it deploy/netpulse-prometheus -- wget -qO- http://localhost:9090/-/ready
+kubectl exec -it deploy/netpulse-alertmanager -- wget -qO- http://localhost:9093/-/ready
+```
 
 ## Open Streamlit AI UI
 

@@ -1,0 +1,18 @@
+groups:
+  - name: netpulse-alerts
+    rules:
+      - alert: NetPulseWatchdog
+        expr: vector(1)
+        labels:
+          severity: info
+        annotations:
+          summary: "NetPulse alert pipeline watchdog"
+          description: "This alert always fires to confirm Prometheus to Alertmanager flow."
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Target down"
+          description: "{{ $labels.job }} target {{ $labels.instance }} is down"

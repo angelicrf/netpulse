@@ -15,10 +15,41 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
 
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: netpulse-alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: netpulse-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=24h
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    depends_on:
+      - alertmanager
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+
   grafana:
     image: grafana/grafana:11.1.0
     container_name: netpulse-grafana
     restart: unless-stopped
+    depends_on:
+      - postgres
+      - prometheus
     ports:
       - "3000:3000"
     environment:

@@ -26,6 +26,11 @@ metadata:
   name: netpulse-postgres
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: netpulse-postgres
@@ -51,11 +56,11 @@ spec:
           mountPath: /var/lib/postgresql/data
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "250m"
+            memory: "384Mi"
+            cpu: "200m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "768Mi"
+            cpu: "400m"
       volumes:
       - name: postgres-storage
         persistentVolumeClaim:
@@ -74,6 +79,7 @@ data:
     datasources:
       - name: NetPulse Postgres
         type: postgres
+        uid: postgres
         access: proxy
         url: postgres:5432
         database: netpulse
@@ -84,6 +90,12 @@ data:
           sslmode: disable
           postgresVersion: 1600
           timescaledb: false
+      - name: NetPulse Prometheus
+        type: prometheus
+        uid: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: false
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -146,7 +158,7 @@ data:
         {
           "datasource": {
             "type": "postgres",
-            "uid": "default"
+            "uid": "postgres"
           },
           "fieldConfig": {
             "defaults": {
@@ -204,7 +216,7 @@ data:
         {
           "datasource": {
             "type": "postgres",
-            "uid": "default"
+            "uid": "postgres"
           },
           "fieldConfig": {
             "defaults": {
@@ -262,7 +274,7 @@ data:
         {
           "datasource": {
             "type": "postgres",
-            "uid": "default"
+            "uid": "postgres"
           },
           "fieldConfig": {
             "defaults": {
@@ -323,6 +335,205 @@ data:
     }
 ---
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  labels:
+    app: netpulse-prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ["alertmanager:9093"]
+
+    rule_files:
+      - /etc/prometheus/rules/alerts.yml
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+      - job_name: alertmanager
+        static_configs:
+          - targets: ["alertmanager:9093"]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  labels:
+    app: netpulse-prometheus
+data:
+  alerts.yml: |
+    groups:
+      - name: netpulse-alerts
+        rules:
+          - alert: NetPulseWatchdog
+            expr: vector(1)
+            labels:
+              severity: info
+            annotations:
+              summary: "NetPulse alert pipeline watchdog"
+              description: "This alert always fires to confirm Prometheus to Alertmanager flow."
+          - alert: PrometheusTargetDown
+            expr: up == 0
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Target down"
+              description: "{{ $labels.job }} target {{ $labels.instance }} is down"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  labels:
+    app: netpulse-alertmanager
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+
+    route:
+      receiver: "default"
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 3h
+
+    receivers:
+      - name: "default"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: netpulse-secrets
+  labels:
+    app: netpulse
+type: Opaque
+stringData:
+  OPENAI_API_KEY: "set-me-via-kubectl-or-ci"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+spec:
+  type: NodePort
+  ports:
+    - port: 9090
+      targetPort: 9090
+  selector:
+    app: netpulse-prometheus
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netpulse-prometheus
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: netpulse-prometheus
+  template:
+    metadata:
+      labels:
+        app: netpulse-prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.55.0
+        args:
+          - --config.file=/etc/prometheus/prometheus.yml
+          - --storage.tsdb.path=/prometheus
+          - --storage.tsdb.retention.time=24h
+          - --web.enable-lifecycle
+        ports:
+        - containerPort: 9090
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+        - name: prometheus-rules
+          mountPath: /etc/prometheus/rules
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "384Mi"
+            cpu: "300m"
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-config
+      - name: prometheus-rules
+        configMap:
+          name: prometheus-rules
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+spec:
+  type: NodePort
+  ports:
+    - port: 9093
+      targetPort: 9093
+  selector:
+    app: netpulse-alertmanager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netpulse-alertmanager
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: netpulse-alertmanager
+  template:
+    metadata:
+      labels:
+        app: netpulse-alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.27.0
+        args:
+          - --config.file=/etc/alertmanager/alertmanager.yml
+        ports:
+        - containerPort: 9093
+        volumeMounts:
+        - name: alertmanager-config
+          mountPath: /etc/alertmanager
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: alertmanager-config
+        configMap:
+          name: alertmanager-config
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: grafana
@@ -340,6 +551,11 @@ metadata:
   name: netpulse-grafana
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: netpulse-grafana
@@ -372,10 +588,10 @@ spec:
         resources:
           requests:
             memory: "256Mi"
-            cpu: "250m"
+            cpu: "150m"
           limits:
             memory: "512Mi"
-            cpu: "500m"
+            cpu: "300m"
       volumes:
       - name: grafana-datasources
         configMap:
@@ -393,6 +609,11 @@ metadata:
   name: netpulse-backend
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: netpulse-backend
@@ -418,18 +639,19 @@ spec:
         - name: POSTGRES_PASSWORD
           value: "netpulse"
         - name: OPENAI_API_KEY
-          value: "" # Fill this or pass as secret
-        - name: OPENAI_API_KEY
-          value: "" # Fill this or pass as secret
+          valueFrom:
+            secretKeyRef:
+              name: netpulse-secrets
+              key: OPENAI_API_KEY
         - name: OPENAI_MODEL
           value: "gpt-4o-mini"
         resources:
           requests:
             memory: "256Mi"
-            cpu: "250m"
+            cpu: "200m"
           limits:
             memory: "512Mi"
-            cpu: "500m"
+            cpu: "300m"
 ---
 apiVersion: v1
 kind: Service
@@ -449,6 +671,11 @@ metadata:
   name: netpulse-frontend
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: netpulse-frontend
@@ -474,11 +701,10 @@ spec:
           value: "netpulse"
         ports:
         - containerPort: 8501
-
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "250m"
+            memory: "192Mi"
+            cpu: "150m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "384Mi"
+            cpu: "250m"
